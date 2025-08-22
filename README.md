@@ -46,11 +46,11 @@ This project combines automated triggers, database-driven content, and AI-genera
 ### Character Sheet
 ![Character Sheet](./character_sheet.png)
 
-### Tiamat
-![Tiamat](./Tiamat.png)
-
 ### Demogorgon
 ![Demogorgon](./Demogorgon.png)
+
+### Malice.png
+![Malice](./Malice.png)
 
 ### Icecrag
 ![Icecrag Castle](./icecrag.png)
@@ -58,14 +58,11 @@ This project combines automated triggers, database-driven content, and AI-genera
 ### Juiblex
 ![Juiblex](./Juiblex.png)
 
-### Malice.png
-![Malice](./Malice.png)
+### Tiamat
+![Tiamat](./Tiamat.png)
 
 ### Tiamat Tablet
 ![Tablet](./Tablet.png)
-
-### Tiamat
-![Tiamat](./Tiamat.png)
 
 To Contribute, send me a message at zenevan@zenevan.com or here
 Images
