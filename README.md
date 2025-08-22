@@ -44,7 +44,7 @@ This project combines automated triggers, database-driven content, and AI-genera
 ## 📖 Notebook Assets (Samples)
 
 ### Character Sheet
-![Character Sheet](./Character.png)
+![Character Sheet](./character_sheet.png)
 
 ### Tiamat
 ![Tiamat](./Tiamat.png)
@@ -53,7 +53,7 @@ This project combines automated triggers, database-driven content, and AI-genera
 ![Demogorgon](./Demogorgon.png)
 
 ### Icecrag
-![Icecrag Castle](./Icecrag.png)
+![Icecrag Castle](./icecrag.png)
 
 ### Juiblex
 ![Juiblex](./Juiblex.png)
@@ -68,3 +68,6 @@ This project combines automated triggers, database-driven content, and AI-genera
 ![Tiamat](./Tiamat.png)
 
 To Contribute, send me a message at zenevan@zenevan.com or here
+Images
+13 minutes ago
+tablet.png
