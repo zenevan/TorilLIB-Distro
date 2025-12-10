@@ -1862,6 +1862,7 @@ This document contains various color schemes for "Sojourn Assassination Squad" a
 - Colors can be specified using CSS3 color names or hex codes
 - Test colors in-game using the `color <msg>` command to see how they appear on different terminal types
 - For more information, see: https://github.com/torilmud/docs/wiki/Colors
+- Template : https://justpaste.it/lpsab
 
 ---
 
