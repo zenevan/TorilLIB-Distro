@@ -1,0 +1,121 @@
+TorilLib/
+├── README.md                          # ✅ Main documentation
+├── CHANGELOG.md                       # 📝 TODO: Create
+├── LICENSE                           # 📝 TODO: Create
+│
+├── docs/                             # Documentation
+│   ├── API.md                        # 📝 TODO: API reference
+│   ├── ARCHITECTURE.md               # 📝 TODO: System design
+│   ├── INTEGRATION.md                # 📝 TODO: Integration guide
+│   ├── PHASE-2-3-TRANSITION.md      # ✅ Exists
+│   └── TROUBLESHOOTING.md            # 📝 TODO: Common issues
+│
+├── src/                              # Source code
+│   ├── init.lua                      # 📝 TODO: Main entry point
+│   ├── config.lua                    # 📝 TODO: Configuration
+│   │
+│   ├── core/                         # Core systems
+│   │   ├── StateManager.lua          # ✅ Complete
+│   │   ├── EventBus.lua              # ✅ Complete
+│   │   ├── DataParser.lua            # 📝 TODO: Create
+│   │   ├── Validator.lua             # 📝 TODO: Create
+│   │   └── Logger.lua                # 📝 TODO: Create
+│   │
+│   ├── gui/                          # GUI components
+│   │   ├── GUIFlex.lua               # ✅ Complete
+│   │   ├── ContainerManager.lua      # 📝 TODO: Create
+│   │   ├── ThemeManager.lua          # 📝 TODO: Create
+│   │   ├── LayoutManager.lua         # 📝 TODO: Create
+│   │   └── components/               # GUI widgets
+│   │       ├── StatusBar.lua         # 📝 TODO: Create
+│   │       ├── CombatLog.lua         # 📝 TODO: Create
+│   │       └── GroupPanel.lua        # 📝 TODO: Create
+│   │
+│   ├── character/                    # Character management (Phase 3)
+│   │   ├── CharacterProfile.lua      # 📝 TODO: Create
+│   │   ├── EquipmentManager.lua      # 📝 TODO: Create
+│   │   ├── StatsCalculator.lua       # 📝 TODO: Create
+│   │   ├── ProgressionTracker.lua    # 📝 TODO: Create
+│   │   └── InventoryManager.lua      # 📝 TODO: Create
+│   │
+│   ├── combat/                       # Combat system (Phase 4)
+│   │   ├── CombatTracker.lua         # 📝 TODO: Create
+│   │   ├── CooldownManager.lua       # 📝 TODO: Create
+│   │   ├── QueueSystem.lua           # 📝 TODO: Create
+│   │   ├── DamageCalculator.lua      # 📝 TODO: Create
+│   │   └── TargetManager.lua         # 📝 TODO: Create
+│   │
+│   ├── group/                        # Group management
+│   │   ├── GroupManager.lua          # 📝 TODO: Create
+│   │   ├── MemberTracker.lua         # 📝 TODO: Create
+│   │   └── RaidCoordinator.lua       # 📝 TODO: Create (Future)
+│   │
+│   ├── map/                          # Map system
+│   │   ├── MapExporter.lua           # ✅ Mentioned in docs
+│   │   ├── MapReader.lua             # ✅ Mentioned in docs
+│   │   ├── PathFinder.lua            # 📝 TODO: Create
+│   │   └── AreaTracker.lua           # 📝 TODO: Create
+│   │
+│   ├── database/                     # Game data
+│   │   ├── Classes.lua               # 📝 TODO: Convert from SQL
+│   │   ├── Races.lua                 # 📝 TODO: Convert from SQL
+│   │   ├── Skills.lua                # 📝 TODO: Convert from SQL
+│   │   ├── Spells.lua                # 📝 TODO: Convert from SQL
+│   │   ├── Powers.lua                # 📝 TODO: Convert from SQL
+│   │   ├── Items.lua                 # 📝 TODO: Create
+│   │   └── Zones.lua                 # 📝 TODO: Create
+│   │
+│   ├── triggers/                     # Mudlet triggers
+│   │   ├── PromptTriggers.lua        # 📝 TODO: Create
+│   │   ├── CombatTriggers.lua        # 📝 TODO: Create
+│   │   ├── EquipmentTriggers.lua     # 📝 TODO: Create
+│   │   ├── GroupTriggers.lua         # 📝 TODO: Create
+│   │   └── SystemTriggers.lua        # 📝 TODO: Create
+│   │
+│   ├── parsers/                      # Data parsing
+│   │   ├── PromptParser.lua          # 📝 TODO: Extract from Integration
+│   │   ├── EquipmentParser.lua       # 📝 TODO: Extract from Integration
+│   │   ├── CombatParser.lua          # 📝 TODO: Extract from Integration
+│   │   ├── GroupParser.lua           # 📝 TODO: Extract from Integration
+│   │   └── StatsParser.lua           # 📝 TODO: Create
+│   │
+│   ├── utils/                        # Utility functions
+│   │   ├── StringUtils.lua           # 📝 TODO: Create
+│   │   ├── TableUtils.lua            # 📝 TODO: Create
+│   │   ├── MathUtils.lua             # 📝 TODO: Create
+│   │   └── ColorUtils.lua            # 📝 TODO: Create
+│   │
+│   └── Integration.lua               # ✅ Complete example
+│
+├── data/                             # Data files
+│   ├── characters/                   # Saved character profiles
+│   ├── state.json                    # Persisted state
+│   ├── settings.json                 # User settings
+│   └── cache/                        # Temporary cache
+│
+├── tests/                            # Test suite
+│   ├── core/
+│   │   ├── StateManager_test.lua     # 📝 TODO: Create
+│   │   └── EventBus_test.lua         # 📝 TODO: Create
+│   ├── parsers/
+│   │   ├── PromptParser_test.lua     # 📝 TODO: Create
+│   │   └── EquipmentParser_test.lua  # 📝 TODO: Create
+│   └── integration/
+│       └── full_flow_test.lua        # 📝 TODO: Create
+│
+├── examples/                         # Example scripts
+│   ├── basic_setup.lua               # 📝 TODO: Create
+│   ├── custom_triggers.lua           # 📝 TODO: Create
+│   └── advanced_config.lua           # 📝 TODO: Create
+│
+└── assets/                           # Resources
+    ├── themes/                       # GUI themes
+    │   ├── default.lua               # 📝 TODO: Create
+    │   └── dark.lua                  # 📝 TODO: Create
+    ├── icons/                        # Icons/images
+    └── sounds/                       # Sound effects (optional)
+
+Legend:
+✅ Complete and ready
+📝 TODO: Needs to be created
+⚠️  Needs revision/improvement
