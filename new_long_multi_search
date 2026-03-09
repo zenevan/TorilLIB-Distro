@@ -1,0 +1,313 @@
+-- syntax #lbag bagname [optional] maxwis hp dam
+-------------------------------------------------------
+-- LONG STATS DATABASE
+-------------------------------------------------------
+
+NyyLIB.longcache = NyyLIB.longcache or {}
+
+function loadLongDatabase()
+  local filepath = getMudletHomeDir() .. "/long_stats.txt"
+  local file = io.open(filepath, "r")
+
+  if not file then
+    cecho("<red>[Error: Could not open " .. filepath .. "]\n")
+    return false
+  end
+
+  NyyLIB.longcache = {}
+  local count = 0
+
+  for line in file:lines() do
+    if line and line:len() > 0 then
+      local entry = parseLongStatLine(line)
+      if entry then
+        table.insert(NyyLIB.longcache, entry)
+        count = count + 1
+      end
+    end
+  end
+
+  file:close()
+  cecho("\n<green>[Loaded " .. count .. " items from long stats database]\n")
+  return true
+end
+
+function parseLongStatLine(line)
+  -- Format:
+  -- a item name (keywords here) * TYPE (SLOT SLOT) * Wt:X Val:X * stats * FLAGS * Location (R) * date
+
+  -- Split on " * "
+  local parts = {}
+  for part in line:gmatch("([^*]+)%*?") do
+    parts[#parts + 1] = part:trim()
+  end
+
+  if #parts < 2 then return nil end
+
+  -- Part 1: "a item name (keywords)"
+  -- Use explicit paren search instead of lazy regex
+  local fullname, keywords
+  local paren_start = parts[1]:find("%s*%(")
+  if paren_start then
+    fullname = parts[1]:sub(1, paren_start - 1):trim()
+    keywords = parts[1]:match("%((.-)%)%s*$") or ""
+  else
+    fullname = parts[1]:trim()
+    keywords = ""
+  end
+
+  -- Part 2: "TYPE (SLOT SLOT)" or "!ID"
+  local itype, slots = "", ""
+  if parts[2] then
+    itype, slots = parts[2]:match("^(%S+)%s*%((.-)%)%s*$")
+    if not itype then
+      itype = parts[2]:trim()
+      slots = ""
+    end
+  end
+
+  -- Remaining parts: scan for Wt/Val, stats, flags, location, date
+  local wt, val = 0, 0
+  local statparts = {}
+  local flags = {}
+  local location, rarity, date = "", "", ""
+
+  for i = 3, #parts do
+    local p = parts[i]:trim()
+    if p == "" then
+      -- skip
+    elseif p:match("^%d%d%d%d%-%d%d%-%d%d$") then
+      -- date stamp
+      date = p
+    elseif p:match("^Wt:") then
+      -- weight/value line
+      wt  = tonumber(p:match("Wt:(%d+)")) or 0
+      val = tonumber(p:match("Val:(%d+)")) or 0
+    elseif p == "QUEST-ITEM" then
+      -- standalone QUEST-ITEM tag between flags and location - treat as flag
+      flags[#flags + 1] = p
+    elseif p:match("%(([RNQSICX!])%)%s*$") then
+      -- location line like "Bahamut (R)"
+      rarity   = p:match("%(([RNQSICX!])%)%s*$") or ""
+      location = p:gsub("%s*%([RNQSICX!]%)%s*$", ""):trim()
+    elseif p:match("^[A-Z][A-Z%-]+") and not p:match(":") then
+      -- FLAGS line (all caps, no colons) e.g. "ANTI-GOOD NO-MAGE FLOAT"
+      for flag in p:gmatch("%S+") do
+        flags[#flags + 1] = flag
+      end
+    elseif p:match("Holds:") or p:match("Wtless:") or p:match("Level %d")
+        or p:match("Type:") or p:match("Dice:") or p:match("Powers:")
+        or p:match("Proc:") or p:match("Called Proc:") or p:match("Combat Bonus:")
+        or p:match("Enchants:") or p:match("[A-Za-z]+:%d") or p:match("[A-Za-z]+:%-?%d") then
+      -- stat line
+      statparts[#statparts + 1] = p
+    else
+      -- fallback - treat as stat
+      statparts[#statparts + 1] = p
+    end
+  end
+
+  local statsstr   = table.concat(statparts, " ")
+  local flagsstr   = table.concat(flags, " ")
+  local full_lower = line:lower()
+
+  return {
+    line        = line,
+    line_lower  = full_lower,
+    fullname    = fullname,
+    name_lower  = fullname:lower(),
+    keywords    = keywords,
+    keys_lower  = keywords:lower(),
+    itype       = itype:upper(),
+    slots       = slots:upper(),
+    stats       = statsstr,
+    stats_lower = statsstr:lower(),
+    flags       = flagsstr,
+    flags_lower = flagsstr:lower(),
+    location    = location,
+    rarity      = rarity,
+    date        = date,
+    wt          = wt,
+    val         = val,
+  }
+end
+
+-------------------------------------------------------
+-- LONG STAT SEARCH FUNCTIONS
+-------------------------------------------------------
+
+-- Search long db by item name or keyword
+function longIdItem(xname)
+  if not NyyLIB.longcache or #NyyLIB.longcache == 0 then
+    cecho("<red>[Long stat cache not loaded!]\n")
+    return {}
+  end
+
+  xname = xname:gsub("%(poisoned%)", ""):trim()
+  local term = xname:lower()
+  local retval = {}
+
+  for _, item in ipairs(NyyLIB.longcache) do
+    if item.name_lower:find(term, 1, true) or item.keys_lower:find(term, 1, true) then
+      table.insert(retval, item)
+    end
+  end
+
+  return retval
+end
+
+-- Advanced search with comma-separated terms and - negation
+-- Searches across the entire line (name, type, slots, stats, flags, location)
+-- Special prefix shortcuts:
+--   slot:FINGER   type:WEAPON   flag:ANTI-GOOD   loc:Bahamut   rare:R
+function longSearch(xsearch, displayresults)
+  if not NyyLIB.longcache or #NyyLIB.longcache == 0 then
+    cecho("<red>[Long stat cache not loaded!]\n")
+    return {}
+  end
+
+  local terms = {}
+  for t in xsearch:gmatch("[^,]+") do
+    local term = t:trim()
+    if term ~= "" then
+      terms[#terms + 1] = term
+    end
+  end
+
+  local retval = {}
+
+  for _, item in ipairs(NyyLIB.longcache) do
+    local match = true
+
+    for _, term in ipairs(terms) do
+      local neg = false
+      if term:sub(1,1) == "-" then
+        neg  = true
+        term = term:sub(2)
+      end
+
+      local found = false
+      local termlow = term:lower()
+
+      -- Prefix-based field targeting
+      local prefix, value = termlow:match("^(%a+):(.+)$")
+
+      if prefix == "slot" then
+        found = item.slots:lower():find(value, 1, true) ~= nil
+      elseif prefix == "type" then
+        found = item.itype:lower():find(value, 1, true) ~= nil
+      elseif prefix == "flag" then
+        found = item.flags_lower:find(value, 1, true) ~= nil
+      elseif prefix == "loc" then
+        found = item.location:lower():find(value, 1, true) ~= nil
+      elseif prefix == "rare" then
+        found = item.rarity:lower() == value
+      elseif prefix == "key" then
+        found = item.keys_lower:find(value, 1, true) ~= nil
+      elseif prefix == "date" then
+        found = item.date:find(value, 1, true) ~= nil
+      else
+        -- General search across whole line
+        found = item.line_lower:find(termlow, 1, true) ~= nil
+      end
+
+      if neg and found         then match = false; break end
+      if not neg and not found then match = false; break end
+    end
+
+    if match then
+      retval[#retval + 1] = item
+    end
+  end
+
+  if displayresults then
+    longDisplayResults(retval, xsearch)
+  end
+
+  return retval
+end
+
+function longDisplayResults(results, searchterm)
+  if #results == 0 then
+    cecho("<yellow>[No items found: " .. searchterm .. "]\n")
+    return
+  end
+
+  cecho(" <cyan>(" .. #results .. " results) ---\n")
+
+  for _, item in ipairs(results) do
+    local raritycolor = "<white>"
+    if     item.rarity == "R" then raritycolor = "<yellow>"
+    elseif item.rarity == "Q" then raritycolor = "<cyan>"
+    elseif item.rarity == "N" then raritycolor = "<green>"
+    elseif item.rarity == "I" then raritycolor = "<magenta>"
+    end
+
+    -- Name
+    cecho("<white>" .. item.fullname)
+
+    -- Keywords inline in parens
+    if item.keywords ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.keywords .. ")")
+    end
+
+    -- Type
+    if item.itype ~= "" then
+      cecho(" <cornflower_blue>" .. item.itype)
+    end
+
+    -- Slots
+    if item.slots ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.slots .. ")")
+    end
+
+    -- Wt/Val
+    cecho(" <dark_slate_gray>Wt:" .. item.wt .. " Val:" .. item.val)
+
+    -- Stats
+    if item.stats ~= "" then
+      cecho(" <green>" .. item.stats)
+    end
+
+    -- Flags (highlight class restrictions)
+    if item.flags ~= "" then
+      local flagstr = item.flags
+      flagstr = flagstr:gsub("(NO%-%a+)", "<red>%1<reset>")
+      flagstr = flagstr:gsub("(ANTI%-%a+)", "<orange>%1<reset>")
+      cecho(" " .. flagstr)
+    end
+
+    -- Location + rarity
+    cecho(" " .. raritycolor .. item.location)
+    if item.rarity ~= "" then
+      cecho(" (" .. item.rarity .. ")")
+    end
+    cecho("<reset>\n")
+  end
+
+  cecho("<cyan>--- End of results ---\n")
+end
+
+-------------------------------------------------------
+-- COMBINED LOOKUP (tries long db first, falls back to short)
+-------------------------------------------------------
+
+function iditem(xname)
+  -- Try long db first for richer data
+  local longresults = longIdItem(xname)
+  if #longresults > 0 then
+    return longresults[1].line
+  end
+  -- Fall back to short db
+  local shortresults = sqliditem(xname)
+  if shortresults[1] then
+    return shortresults[1]
+  end
+  return nil
+end
+
+-------------------------------------------------------
+-- AUTO-LOAD LONG DB
+-------------------------------------------------------
+
+loadLongDatabase()
