@@ -1,0 +1,156 @@
+
+^#lbag·(\S+)\s*(.*)$
+
+NyyLIB.bagcheck = NyyLIB.bagcheck or {}
+NyyLIB.bagcheck.search = matches[3] and matches[3]:trim():gsub("%s+", ",") or ""
+NyyLIB.bagcheck.uselong = true
+disableTrigger("DisplayPotions")
+enableTrigger("DisplayContainer")
+send("examine " .. matches[2])
+
+-- Triggers to be updated
+--container contents
+--regex: (.+)
+
+--Code:
+local itemname = matches[2]
+
+if string.find(itemname, "%(carried%)") then
+  deleteLine()
+  return
+end
+
+-- Remove (magic), (illuminating), (glowing), etc.
+itemname = string.gsub(itemname, " %(.+%)", "")
+
+-- Strip leading [#] count prefix
+if string.find(itemname, "] ") ~= nil then
+  itemname = string.sub(itemname, string.find(itemname, "] ") + 2)
+end
+
+itemname = itemname:trim()
+
+local search  = (NyyLIB.bagcheck and NyyLIB.bagcheck.search)  or ""
+local uselong = (NyyLIB.bagcheck and NyyLIB.bagcheck.uselong) or false
+
+if uselong then
+  -- Use long stat database with rich display
+  local results = longIdItem(itemname)
+
+  if #results == 0 then
+    if search == "" then
+      noIdItems[table.size(noIdItems) + 1] = itemname
+    else
+      deleteLine()
+    end
+    return
+  end
+
+  local item = results[1]
+
+  -- Apply search filter if set
+  if search ~= "" then
+    local show = true
+    for term in search:lower():gmatch("[^,]+") do
+      term = term:trim()
+      local neg = false
+      if term:sub(1,1) == "-" then neg = true; term = term:sub(2) end
+      local found = item.line_lower:find(term, 1, true) ~= nil
+      if neg and found     then show = false; break end
+      if not neg and not found then show = false; break end
+    end
+    if not show then deleteLine(); return end
+  end
+
+-- Display with long-style coloring
+  local raritycolor = "<white>"
+  if     item.rarity == "R" then raritycolor = "<yellow>"
+  elseif item.rarity == "Q" then raritycolor = "<cyan>"
+  elseif item.rarity == "N" then raritycolor = "<green>"
+  elseif item.rarity == "I" then raritycolor = "<magenta>"
+  end
+
+  -- Name
+  cecho("<white>" .. item.fullname)
+
+  -- Keywords
+  if item.keywords ~= "" then
+    cecho(" <dark_slate_gray>Keywords:(" .. item.keywords .. ")")
+  end
+
+  -- Type
+  if item.itype ~= "" then
+    cecho(" <cornflower_blue>" .. item.itype)
+  end
+
+  -- Slots
+  if item.slots ~= "" then
+    cecho(" <dark_slate_gray>(" .. item.slots .. ")")
+  end
+
+  -- Wt/Val
+  cecho(" <dark_slate_gray>Wt:" .. item.wt .. " Val:" .. item.val)
+
+  -- Stats
+  if item.stats ~= "" then
+    cecho(" <green>" .. item.stats)
+  end
+
+  -- Flags
+  if item.flags ~= "" then
+    local flagstr = item.flags
+    flagstr = flagstr:gsub("(NO%-%a+)",   "<red>%1<reset>")
+    flagstr = flagstr:gsub("(ANTI%-%a+)", "<orange>%1<reset>")
+    cecho(" " .. flagstr)
+  end
+
+  -- Location + rarity
+  cecho(" " .. raritycolor .. item.location)
+  if item.rarity ~= "" then cecho(" (" .. item.rarity .. ")") end
+  cecho("<reset>\n")
+
+else
+  -- Original short db path
+  local itemid = sqliditem(itemname)
+
+  if itemid[1] then
+    local statline = itemid[1]
+
+    if search ~= "" then
+      local show = true
+      for term in search:lower():gmatch("[^,]+") do
+        term = term:trim()
+        local neg = false
+        if term:sub(1,1) == "-" then neg = true; term = term:sub(2) end
+        if SEARCH_ALIASES and SEARCH_ALIASES[term] then
+          local alias = SEARCH_ALIASES[term]
+          if alias:sub(1,1) == "-" then neg = not neg; alias = alias:sub(2) end
+          term = alias:lower()
+        end
+        local found = statline:lower():find(term, 1, true) ~= nil
+        if neg and found     then show = false; break end
+        if not neg and not found then show = false; break end
+      end
+      if not show then deleteLine(); return end
+    end
+
+    local display_line = string.gsub(statline, itemname, "")
+    cecho("<cyan> " .. display_line .. "\n")
+  else
+    if search == "" then
+      noIdItems[table.size(noIdItems) + 1] = itemname
+    else
+      deleteLine()
+    end
+  end
+end
+--end container code
+
+Trigger: DisableDisplayContainer
+disableTrigger("DisplayContainer")
+disableTrigger("container contents")
+
+enableTrigger("DisplayPotions")
+
+
+
