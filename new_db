@@ -1,0 +1,770 @@
+-- the file long_stats.txt file is required, also in this directory should be in your profile root eg profiles\torilmud\long_stats.txt
+
+--sqlfunctions replacement
+--search for sqlfunctions you will find a script
+--replace the entire script with this
+
+
+--Usage examples with new syntax:
+--#lbag pack hp manaitems with hp AND mana
+--#lbag pack hp,manaitems with hp OR mana
+--#lbag pack hp !no-magehp items a mage CAN use
+--#lbag satchel cleric !quest-itemcleric gear, no quest items
+--#lbag bag ac,hp !anti-goodac or hp, not anti-good
+
+
+--Begin Lua sqlfunctions
+-------------------------------------------------
+--         Put your Lua functions here.        --
+--                                             --
+-- Note that you can also use external Scripts --
+-------------------------------------------------
+
+NyyLIB = NyyLIB or {}
+NyyLIB.itemcache = NyyLIB.itemcache or {}   -- short stats cache
+NyyLIB.longcache = NyyLIB.longcache or {}   -- long stats cache
+NyyLIB.itemdb    = NyyLIB.itemdb    or {}   -- consumable cache
+
+
+-------------------------------------------------------
+-- SHORT STATS DATABASE (replaces SQL items table)
+-------------------------------------------------------
+
+function loadItemDatabase()
+  local filepath = getMudletHomeDir() .. "/short_stats.txt"
+  local file = io.open(filepath, "r")
+
+  if not file then
+    cecho("<red>[Error: Could not open " .. filepath .. "]\n")
+    return false
+  end
+
+  NyyLIB.itemcache = {}
+  local count = 0
+
+  for line in file:lines() do
+    if line and #line > 0 then
+      local itemname = line:match("^([^%(]+)")
+      if itemname then
+        itemname = itemname:trim()
+        table.insert(NyyLIB.itemcache, {
+          name       = itemname,
+          name_lower = itemname:lower(),
+          stats      = line,
+          stats_lower= line:lower()
+        })
+        count = count + 1
+      end
+    end
+  end
+
+  file:close()
+  cecho("<green>[Loaded " .. count .. " items from short stats database]\n")
+  return true
+end
+
+
+-------------------------------------------------------
+-- LONG STATS DATABASE
+-------------------------------------------------------
+
+function loadLongDatabase()
+  local filepath = getMudletHomeDir() .. "/long_stats.txt"
+  local file = io.open(filepath, "r")
+
+  if not file then
+    cecho("<red>[Error: Could not open " .. filepath .. "]\n")
+    return false
+  end
+
+  NyyLIB.longcache = {}
+  local count = 0
+
+  for line in file:lines() do
+    if line and #line > 0 then
+      local entry = parseLongStatLine(line)
+      if entry then
+        table.insert(NyyLIB.longcache, entry)
+        count = count + 1
+      end
+    end
+  end
+
+  file:close()
+  cecho("<green>[Loaded " .. count .. " items from long stats database]\n")
+  return true
+end
+
+function parseLongStatLine(line)
+  -- Format:
+  -- item name (keywords) * TYPE (SLOT) * Wt:X Val:X * stats * FLAGS * Location (R) * date
+
+  local parts = {}
+  for part in line:gmatch("([^*]+)") do
+    parts[#parts+1] = part:trim()
+  end
+
+  if #parts < 2 then return nil end
+
+  -- Part 1: name (keywords)
+  local fullname, keywords
+  local paren = parts[1]:find("%s*%(")
+  if paren then
+    fullname = parts[1]:sub(1, paren - 1):trim()
+    keywords = parts[1]:match("%((.-)%)%s*$") or ""
+  else
+    fullname = parts[1]:trim()
+    keywords = ""
+  end
+
+  -- Part 2: TYPE (SLOT)
+  local itype, slots = "", ""
+  if parts[2] then
+    local t, s = parts[2]:match("^(%S+)%s*%((.-)%)%s*$")
+    if t then itype, slots = t, s
+    else itype = parts[2]:trim() end
+  end
+
+  -- Remaining parts
+  local wt, val = 0, 0
+  local statparts, flagparts = {}, {}
+  local location, rarity, date = "", "", ""
+
+  for i = 3, #parts do
+    local p = parts[i]:trim()
+    if p == "" then
+      -- skip
+    elseif p:match("^%d%d%d%d%-%d%d%-%d%d$") then
+      date = p
+    elseif p:match("^Wt:%d") then
+      wt  = tonumber(p:match("Wt:(%d+)")) or 0
+      val = tonumber(p:match("Val:(%d+)")) or 0
+    elseif p:match("%(([RNQSICX!])%)%s*$") then
+      rarity   = p:match("%(([RNQSICX!])%)%s*$") or ""
+      location = p:gsub("%s*%([RNQSICX!]%)%s*$",""):trim()
+    elseif p:match("^[A-Z][A-Z%-%s]+$") and not p:match(":") then
+      -- all-caps flags line
+      for flag in p:gmatch("%S+") do
+        flagparts[#flagparts+1] = flag
+      end
+    else
+      statparts[#statparts+1] = p
+    end
+  end
+
+  local stats = table.concat(statparts, " ")
+  local flags = table.concat(flagparts, " ")
+
+  return {
+    fullname    = fullname,
+    name_lower  = fullname:lower(),
+    keywords    = keywords,
+    keys_lower  = keywords:lower(),
+    itype       = itype,
+    slots       = slots,
+    wt          = wt,
+    val         = val,
+    stats       = stats,
+    stats_lower = stats:lower(),
+    flags       = flags,
+    flags_lower = flags:lower(),
+    location    = location,
+    rarity      = rarity,
+    date        = date,
+    line        = line,
+    line_lower  = line:lower()
+  }
+end
+
+-- Search long cache by item name
+function longIdItem(xname)
+  if not NyyLIB.longcache or #NyyLIB.longcache == 0 then return {} end
+
+  local search = xname:lower()
+  -- strip (poisoned)
+  search = search:gsub("%(poisoned%)", ""):trim()
+
+  local retval = {}
+  for _, item in ipairs(NyyLIB.longcache) do
+    if item.name_lower:find(search, 1, true) then
+      retval[#retval+1] = item
+    end
+  end
+  return retval
+end
+
+-- Advanced search with prefix operators:
+--   slot:FINGER  type:WEAPON  flag:ANTI-GOOD  loc:Bahamut
+--   rare:R  key:bag  date:2025  -term (NOT)
+function longSearch(xsearchstr, xdisplay)
+  if not NyyLIB.longcache or #NyyLIB.longcache == 0 then
+    cecho("<red>[Long stats cache not loaded]\n")
+    return {}
+  end
+
+  local terms = {}
+  for term in xsearchstr:lower():gmatch("[^,]+") do
+    terms[#terms+1] = term:trim()
+  end
+
+  local results = {}
+
+  for _, item in ipairs(NyyLIB.longcache) do
+    local match = true
+
+    for _, term in ipairs(terms) do
+      local negate = false
+      if term:sub(1,1) == "-" then
+        negate = true
+        term = term:sub(2)
+      end
+
+      local found = false
+
+      local prefix, val = term:match("^(%a+):(.+)$")
+      if prefix and val then
+        if prefix == "slot" then
+          found = item.slots:lower():find(val, 1, true) ~= nil
+        elseif prefix == "type" then
+          found = item.itype:lower():find(val, 1, true) ~= nil
+        elseif prefix == "flag" then
+          found = item.flags_lower:find(val, 1, true) ~= nil
+        elseif prefix == "loc" then
+          found = item.location:lower():find(val, 1, true) ~= nil
+        elseif prefix == "rare" then
+          found = item.rarity:lower() == val
+        elseif prefix == "key" then
+          found = item.keys_lower:find(val, 1, true) ~= nil
+        elseif prefix == "date" then
+          found = item.date:find(val, 1, true) ~= nil
+        else
+          found = item.line_lower:find(term, 1, true) ~= nil
+        end
+      else
+        found = item.line_lower:find(term, 1, true) ~= nil
+      end
+
+      if negate then found = not found end
+
+      if not found then
+        match = false
+        break
+      end
+    end
+
+    if match then
+      results[#results+1] = item
+    end
+  end
+
+  if xdisplay then
+    longDisplayResults(results, xsearchstr)
+  end
+
+  return results
+end
+
+function longDisplayResults(results, xsearchstr)
+  if #results == 0 then
+    cecho("<red>[No items found matching: " .. (xsearchstr or "") .. "]\n")
+    return
+  end
+
+  cecho(string.format("<cyan>--- %d result(s) for: %s ---\n", #results, xsearchstr or ""))
+
+  for _, item in ipairs(results) do
+    local raritycolor = "<white>"
+    if     item.rarity == "R" then raritycolor = "<yellow>"
+    elseif item.rarity == "Q" then raritycolor = "<cyan>"
+    elseif item.rarity == "N" then raritycolor = "<green>"
+    elseif item.rarity == "I" then raritycolor = "<magenta>"
+    end
+
+    cecho("<white>" .. item.fullname)
+    if item.keywords ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.keywords .. ")")
+    end
+    if item.itype ~= "" then
+      cecho(" <cornflower_blue>" .. item.itype)
+    end
+    if item.slots ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.slots .. ")")
+    end
+    cecho(" <dark_slate_gray>Wt:" .. item.wt .. " Val:" .. item.val)
+    if item.stats ~= "" then
+      cecho(" <green>" .. item.stats)
+    end
+    if item.flags ~= "" then
+      local flagstr = item.flags
+      flagstr = flagstr:gsub("(NO%-%a+)",   "<red>%1<reset>")
+      flagstr = flagstr:gsub("(ANTI%-%a+)", "<orange>%1<reset>")
+      cecho(" " .. flagstr)
+    end
+    cecho(" " .. raritycolor .. item.location)
+    if item.rarity ~= "" then cecho(" (" .. item.rarity .. ")") end
+    cecho("<reset>\n")
+  end
+
+  cecho("<cyan>--- End of results ---\n")
+end
+
+
+-------------------------------------------------------
+-- SHORT STATS DROP-IN FUNCTIONS (same signatures as original SQL)
+-------------------------------------------------------
+
+function sqliditem(xitemname)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+
+  xitemname = xitemname:gsub("%(poisoned%)", ""):trim()
+  local search = xitemname:lower()
+  local retval = {}
+
+  for _, item in ipairs(NyyLIB.itemcache) do
+    if item.name_lower:find(search, 1, true) then
+      retval[#retval+1] = item.stats
+    end
+  end
+  return retval
+end
+
+function sqlshortstats(xsqlstring)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+
+  local sqlitems = xsqlstring:split(",")
+  for i = 1, #sqlitems do sqlitems[i] = sqlitems[i]:trim() end
+
+  local retval = {}
+
+  for _, item in ipairs(NyyLIB.itemcache) do
+    local match = true
+
+    for _, term in ipairs(sqlitems) do
+      local negate = term:sub(1,1) == "-"
+      if negate then term = term:sub(2) end
+      local found = item.stats_lower:find(term:lower(), 1, true) ~= nil
+      if negate and found     then match = false; break end
+      if not negate and not found then match = false; break end
+    end
+
+    if match then retval[#retval+1] = item.stats end
+  end
+
+  return retval
+end
+
+function sqlIsWeapon(xitemname)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+  xitemname = xitemname:gsub("'",""):lower()
+  local retval = {}
+  for _, item in ipairs(NyyLIB.itemcache) do
+    if item.name_lower:find(xitemname, 1, true) then
+      if item.stats_lower:find("%(weapon%)", 1, true) or
+         item.stats_lower:find("%(ranged%)", 1, true) then
+        retval[#retval+1] = item.stats
+      end
+    end
+  end
+  return retval
+end
+
+function sqlIsBow(xitemname)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+  xitemname = xitemname:gsub("'",""):lower()
+  local retval = {}
+  for _, item in ipairs(NyyLIB.itemcache) do
+    if item.name_lower:find(xitemname, 1, true) then
+      if item.stats_lower:find("%(ranged%)", 1, true) then
+        retval[#retval+1] = item.stats
+      end
+    end
+  end
+  return retval
+end
+
+function sqlIs2H(xitemname)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+  xitemname = xitemname:gsub("'",""):lower()
+  local retval = {}
+  for _, item in ipairs(NyyLIB.itemcache) do
+    if item.name_lower:find(xitemname, 1, true) then
+      if item.stats_lower:find("wield 2h",  1, true) or
+         item.stats_lower:find("two_hand",  1, true) or
+         item.stats_lower:find("two%-hand", 1, true) then
+        retval[#retval+1] = item.stats
+      end
+    end
+  end
+  return retval
+end
+
+function sqlindexitem(xitemname)
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then return {} end
+  xitemname = xitemname:gsub("'",""):lower()
+  local retval = {}
+  for i, item in ipairs(NyyLIB.itemcache) do
+    if item.name_lower:find(xitemname, 1, true) then
+      display(i)
+      display(item.name)
+      retval[#retval+1] = item.name
+    end
+  end
+  return retval
+end
+
+function createconsumabledb()
+  if not NyyLIB.itemcache or #NyyLIB.itemcache == 0 then
+    cecho("<red>[Item cache not loaded! Cannot create consumable DB]\n")
+    return
+  end
+
+  NyyLIB.itemdb = {}
+
+  for _, item in ipairs(NyyLIB.itemcache) do
+    local stats = item.stats
+    local function extractConsumable(typetag)
+      local pat = "%%(" .. typetag .. "%%)([A-Za-z0-9: -]+)%*"
+      local retval = stats:match(pat)
+      if retval then
+        NyyLIB.itemdb[item.name] = { typetag:lower(), retval:trim() }
+      end
+    end
+    extractConsumable("Potion")
+    extractConsumable("Scroll")
+    extractConsumable("Poison")
+  end
+
+  cecho("<red>[Consumable database cached: Potions, Scrolls, Poisons]\n")
+end
+
+-- combined lookup: tries long db first, falls back to short
+function iditem(xname)
+  local longresults = longIdItem(xname)
+  if #longresults > 0 then return longresults[1].line end
+  local shortresults = sqliditem(xname)
+  if shortresults[1] then return shortresults[1] end
+  return nil
+end
+
+
+-------------------------------------------------------
+-- CHARACTER DATABASE FUNCTIONS (still use SQLite)
+-------------------------------------------------------
+
+function sqlOpen()
+  NyyLIB.env  = assert(luasql.sqlite3())
+  NyyLIB.conn = assert(NyyLIB.env:connect(mainpath("toril.db")))
+
+  -- cache chars table
+  local recs = assert(NyyLIB.conn:execute([[SELECT * FROM chars]]))
+  local row = recs:fetch({})
+  while row do row = recs:fetch({}) end
+  recs:close()
+
+  -- load text item databases
+  loadItemDatabase()
+  loadLongDatabase()
+end
+
+function sqlinwho(xname)
+  local recs = assert(NyyLIB.conn:execute(
+    [[SELECT class_name, char_race, account_name FROM chars WHERE char_name = ']]
+    .. xname .. [[']]))
+  local row = recs:fetch({})
+  recs:close()
+  if row == nil then return false end
+
+  local profilename
+  for k, v in pairs(NyyLIB.fullclasslist) do
+    if v[1] == row[1]:trim() then
+      whoadd(xname, v[2], row[2], row[3])
+      profilename = row[3]
+    end
+  end
+  return profilename
+end
+
+function sqlprofilename(xname)
+  local recs = assert(NyyLIB.conn:execute(
+    [[SELECT class_name, char_race, account_name FROM chars WHERE char_name = ']]
+    .. xname .. [[']]))
+  local row = recs:fetch({})
+  recs:close()
+  if row == nil then return false end
+  return row[3]
+end
+
+function sqlclist(xname)
+  local retval = {}
+  local recs = assert(NyyLIB.conn:execute([[
+    SELECT char_name, class_name, char_race, char_level, account_name FROM
+    chars WHERE vis = 't' AND (account_name = (SELECT account_name
+    FROM chars WHERE LOWER(char_name) = LOWER(']] .. xname .. [[') AND vis = 't') OR
+    LOWER(account_name) = LOWER(']] .. xname .. [['))
+    ORDER BY char_level DESC, char_name ASC]]))
+  local row = recs:fetch({})
+  while row do
+    retval[#retval+1] = {row[4], row[2], row[1], row[3], row[5]}
+    row = recs:fetch({})
+  end
+  recs:close()
+  return retval
+end
+
+function sqlwhoclass(xname)
+  local recs = assert(NyyLIB.conn:execute(
+    [[SELECT class_name FROM chars WHERE char_name LIKE ']] .. xname .. [[']]))
+  local row = recs:fetch({})
+  while row do
+    echo(row[1] .. "\n")
+    row = recs:fetch({})
+  end
+  recs:close()
+end
+
+
+-------------------------------------------------------
+-- NPC / QUEST STUBS
+-- These will be fleshed out once MySQL schema is ready
+-- and exported to toril.db
+-------------------------------------------------------
+
+function nadd(xname)
+  -- Add NPC at current room to the NPC table
+  -- Requires: map:getRoom() for room_id
+  local room_id = map and map:getRoom() or nil
+  if room_id == nil then
+    cecho("<red>[nadd: not currently located on map]\n")
+    return
+  end
+  if xname == nil or xname == "" then
+    cecho("<red>[nadd: usage: #nadd <npc name>]\n")
+    return
+  end
+  -- TODO: INSERT INTO npcs (name, room_id) VALUES (xname, room_id)
+  cecho(string.format("<green>[NPC stub: would add '%s' at room %d]\n", xname, room_id))
+end
+
+function qadd(xname)
+  -- Create a new quest stub
+  if xname == nil or xname == "" then
+    cecho("<red>[qadd: usage: #qadd <quest name>]\n")
+    return
+  end
+  -- TODO: INSERT INTO quests (name) VALUES (xname)
+  cecho(string.format("<green>[Quest stub: would add quest '%s']\n", xname))
+end
+
+
+-------------------------------------------------------
+-- AUTO-INITIALIZE
+-------------------------------------------------------
+
+if not NyyLIB.conn then
+  loadItemDatabase()
+  loadLongDatabase()
+end
+
+--Lua end sqlfunctions
+
+Alias #lbag 
+Regex:
+^#lbag (\S+)\s*(.*)$
+
+--Usage examples with new syntax:
+--#lbag pack hp manaitems with hp AND mana
+--#lbag pack hp,manaitems with hp OR mana
+--#lbag pack hp !no-magehp items a mage CAN use
+--#lbag satchel cleric !quest-itemcleric gear, no quest items
+--#lbag bag ac,hp !anti-goodac or hp, not anti-good
+--Begin Alias
+NyyLIB.bagcheck = NyyLIB.bagcheck or {}
+NyyLIB.bagcheck.search  = matches[3] and matches[3]:trim() or ""
+NyyLIB.bagcheck.uselong = true
+NyyLIB.bagcheck.found   = 0
+NyyLIB.bagcheck.total   = 0
+NyyLIB.bagcheck.unid    = {}
+
+disableTrigger("DisplayPotions")
+enableTrigger("DisplayContainer")
+send("look in " .. matches[2])
+
+--end Alias
+
+--search for container contents
+
+replace the code in "conainter contents script
+
+local itemname = matches[2]
+
+-- skip carried items
+if string.find(itemname, "%(carried%)") then
+  deleteLine()
+  return
+end
+
+-- strip status flags like (glowing) (magic) etc
+itemname = string.gsub(itemname, " %(.+%)", "")
+
+-- strip leading [#] count prefix
+if string.find(itemname, "] ") ~= nil then
+  itemname = string.sub(itemname, string.find(itemname, "] ") + 2)
+end
+
+itemname = itemname:trim()
+
+local search  = (NyyLIB.bagcheck and NyyLIB.bagcheck.search)  or ""
+local uselong = (NyyLIB.bagcheck and NyyLIB.bagcheck.uselong) or false
+
+-- search parser: space=AND, comma=OR within a term, !=NOT
+local function itemMatchesSearch(line_lower, sstr)
+  if sstr == "" then return true end
+  for term in sstr:lower():gmatch("%S+") do
+    if term:sub(1,1) == "!" then
+      -- NOT: must not contain this
+      local t = term:sub(2)
+      if t ~= "" and line_lower:find(t, 1, true) then
+        return false
+      end
+    elseif term:find(",") then
+      -- OR group: at least one must match
+      local found_any = false
+      for or_term in term:gmatch("[^,]+") do
+        or_term = or_term:trim()
+        if or_term ~= "" and line_lower:find(or_term, 1, true) then
+          found_any = true
+          break
+        end
+      end
+      if not found_any then return false end
+    else
+      -- AND: must contain this
+      if not line_lower:find(term, 1, true) then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+if uselong then
+  NyyLIB.bagcheck.total = (NyyLIB.bagcheck.total or 0) + 1
+
+  local results = longIdItem(itemname)
+
+  if #results == 0 then
+    -- not in DB
+    NyyLIB.bagcheck.unid = NyyLIB.bagcheck.unid or {}
+    table.insert(NyyLIB.bagcheck.unid, itemname)
+    deleteLine()
+    return
+  end
+
+  -- filter results by search
+  local matching = {}
+  for _, item in ipairs(results) do
+    if itemMatchesSearch(item.line_lower, search) then
+      table.insert(matching, item)
+    end
+  end
+
+  if #matching == 0 then
+    deleteLine()
+    return
+  end
+
+  NyyLIB.bagcheck.found = (NyyLIB.bagcheck.found or 0) + 1
+
+  deleteLine()
+
+  -- display each matching result numbered if more than one
+  for idx, item in ipairs(matching) do
+    local prefix = ""
+    if #matching > 1 then
+      prefix = "<dark_slate_gray>" .. idx .. ") "
+    end
+
+    local raritycolor = "<white>"
+    if     item.rarity == "R" then raritycolor = "<yellow>"
+    elseif item.rarity == "Q" then raritycolor = "<cyan>"
+    elseif item.rarity == "N" then raritycolor = "<green>"
+    elseif item.rarity == "I" then raritycolor = "<magenta>"
+    end
+
+    cecho(prefix .. "<white>" .. item.fullname)
+
+    if item.keywords ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.keywords .. ")")
+    end
+
+    if item.itype ~= "" then
+      cecho(" <cornflower_blue>" .. item.itype)
+    end
+
+    if item.slots ~= "" then
+      cecho(" <dark_slate_gray>(" .. item.slots .. ")")
+    end
+
+    cecho(" <dark_slate_gray>Wt:" .. item.wt .. " Val:" .. item.val)
+
+    if item.stats ~= "" then
+      cecho(" <green>" .. item.stats)
+    end
+
+    if item.flags ~= "" then
+      local flagstr = item.flags
+      flagstr = flagstr:gsub("(NO%-%a+)",   "<red>%1<reset>")
+      flagstr = flagstr:gsub("(ANTI%-%a+)", "<orange>%1<reset>")
+      cecho(" " .. flagstr)
+    end
+
+    cecho(" " .. raritycolor .. item.location)
+    if item.rarity ~= "" then cecho(" (" .. item.rarity .. ")") end
+    cecho("<reset>\n")
+  end
+
+else
+  -- short db path unchanged
+  local results = sqliditem(itemname)
+  if #results == 0 then
+    noIdItems[table.size(noIdItems) + 1] = itemname
+    return
+  end
+  for _, statline in ipairs(results) do
+    cecho("<white>" .. statline .. "<reset>\n")
+  end
+  deleteLine()
+end
+
+--end container contents
+
+--and finally disabledisplaycontainer
+
+--replace the code with:
+
+-- print lbag summary if active
+if NyyLIB.bagcheck and NyyLIB.bagcheck.uselong then
+  local found = NyyLIB.bagcheck.found or 0
+  local total = NyyLIB.bagcheck.total or 0
+  local unid  = NyyLIB.bagcheck.unid  or {}
+
+  cecho(string.format(
+    "<dark_slate_gray>[ Found <white>%d<dark_slate_gray>/<white>%d<dark_slate_gray> items",
+    found, total
+  ))
+
+  if #unid > 0 then
+    cecho(string.format(", <red>%d<dark_slate_gray> unidentified", #unid))
+  end
+
+  cecho(" ]\n<reset>")
+
+  NyyLIB.bagcheck.uselong = false
+end
+
+disableTrigger("DisplayContainer")
+disableTrigger("container contents")
+
+enableTrigger("DisplayPotions")
+
+
