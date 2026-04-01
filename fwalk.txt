@@ -1,0 +1,207 @@
+-- #fwalk alias
+-- Regex: ^#fwalk( [0-9A-Za-z]+)?( [A-Za-z]+)?( [0-9A-Za-z]+)?
+-- Alias regex to set in Mudlet:
+
+-- ^#fwalk( [0-9A-Za-z]+)?( [A-Za-z0-9]+)?( [0-9A-Za-z]+)?
+local var1 = string.trim(matches[2] or "")
+local var2 = string.trim(matches[3] or "")
+local var3 = string.trim(matches[4] or "")
+
+local tmpvar = charData:get("fwalk", true)
+local tmplist = {}
+
+local function fastwalk(xroomid)
+  fwalkQue = false
+
+  if roomLocked(xroomid) then
+    cecho("<red>[Error: Destination room " .. xroomid .. " is locked]\n")
+    return
+  end
+
+  if map:getRoom() == nil then
+    cecho("<red>[Error: source room id is nil]\n")
+    return
+  end
+
+  if getPath(map:getRoom(), xroomid) then
+    doSpeedWalk()
+  else
+    cecho("<red>[Unable to find path to room#" .. xroomid .. "]\n")
+  end
+end
+
+-- ── NUMERIC: #fwalk 12345 ────────────────────────────────────────────────────
+if tonumber(var1) ~= nil then
+  if inCombat() then
+    fwalkQue = false
+    cecho("<red>[Can't #fwalk while in combat]\n")
+    return
+  end
+  fastwalk(tonumber(var1))
+  return
+end
+
+-- ── HELP ─────────────────────────────────────────────────────────────────────
+if var1 == "help" then
+  cecho("<red>Usage:\n")
+  cecho("<red>  #fwalk roomnumber       - fastwalk to specified room number\n")
+  cecho("<red>  #fwalk name             - fastwalk to room indicated by fwalk name\n")
+  cecho("<red>  #fwalk add name         - add fwalk to current room using 'name'\n")
+  cecho("<red>  #fwalk add name vnum    - add fwalk to vnum using 'name'\n")
+  cecho("<red>  #fwalk del name         - delete fwalk 'name'\n")
+  cecho("<red>  #fwalk all              - list all fwalks regardless of location\n")
+  cecho("<red>  #fwalk area             - list all fwalks in current area\n")
+  cecho("<red>  #fwalk export           - export all fwalks to fwalk.csv in profile dir\n")
+  cecho("<red>  #fwalk import           - import fwalks from fwalk.csv (overwrites existing)\n")
+  return
+end
+
+echo("\n")
+
+-- ── ALL ───────────────────────────────────────────────────────────────────────
+if var1 == "all" then
+  for k, v in pairs(charData:get("fwalk", true)) do
+    if roomExists(v) then
+      local zoneid = tonumber(getRoomUserData(v, "zoneid"))
+      local pathlength = 0
+      if not roomLocked(v) and getPath(map:getRoom(), v) then
+        pathlength = #speedWalkPath
+      end
+      tmplist[#tmplist+1] = string.format("[%-30s] [%6d %-15s] [%3d] %s\n",
+        NyyLIB.areaTable[zoneid], v, k, pathlength, getRoomName(v))
+    else
+      tmplist[#tmplist+1] = string.format("[%-30s] [%6d %-15s] [%3s] %s\n",
+        "", v, k, "", "")
+    end
+  end
+  cecho("<white>             Area                  Room#      fwalk     Distance          Room Name\n")
+  printSorted(tmplist)
+  return
+end
+
+-- ── AREA ──────────────────────────────────────────────────────────────────────
+if var1 == "area" then
+  local roomid = map:getRoom()
+  local currentareazoneid = tonumber(getRoomUserData(roomid, "zoneid"))
+  for k, v in pairs(charData:get("fwalk", true)) do
+    if roomExists(v) then
+      local zoneid = tonumber(getRoomUserData(v, "zoneid"))
+      local pathlength = 0
+      if not roomLocked(v) and getPath(map:getRoom(), v) then
+        pathlength = #speedWalkPath
+      end
+      if zoneid == currentareazoneid then
+        tmplist[#tmplist+1] = string.format("[%-30s] [%6d %-15s] [%3d] %s\n",
+          NyyLIB.areaTable[zoneid], v, k, pathlength, getRoomName(v))
+      end
+    end
+  end
+  cecho("<white>             Area                  Room#      fwalk     Distance          Room Name\n")
+  printSorted(tmplist)
+  return
+end
+
+-- ── EXPORT ────────────────────────────────────────────────────────────────────
+if var1 == "export" then
+  local path = getMudletHomeDir() .. "/fwalk.csv"
+  local fh, err = io.open(path, "w")
+  if not fh then
+    cecho("<red>[fwalk export failed: " .. tostring(err) .. "]\n")
+    return
+  end
+  fh:write("name,roomid\n")
+  local count = 0
+  for k, v in pairs(tmpvar) do
+    fh:write(k .. "," .. tostring(v) .. "\n")
+    count = count + 1
+  end
+  fh:close()
+  cecho("<green>[Exported " .. count .. " fwalk(s) to " .. path .. "]\n")
+  return
+end
+
+-- ── IMPORT ────────────────────────────────────────────────────────────────────
+if var1 == "import" then
+  local path = getMudletHomeDir() .. "/fwalk.csv"
+  local fh, err = io.open(path, "r")
+  if not fh then
+    cecho("<red>[fwalk import failed: " .. tostring(err) .. "]\n")
+    cecho("<red>[Expected file: " .. path .. "]\n")
+    return
+  end
+  local count = 0
+  local skipped = 0
+  local firstline = true
+  tmpvar = {}
+  for line in fh:lines() do
+    if firstline then
+      firstline = false
+    else
+      local name, roomid = line:match("^([^,]+),(%d+)")
+      if name and roomid then
+        tmpvar[name] = tonumber(roomid)
+        count = count + 1
+      else
+        skipped = skipped + 1
+      end
+    end
+  end
+  fh:close()
+  charData:set("fwalk", tmpvar, true)
+  cecho("<green>[Imported " .. count .. " fwalk(s) from " .. path)
+  if skipped > 0 then
+    cecho(" (" .. skipped .. " malformed line(s) skipped)")
+  end
+  cecho("]\n")
+  return
+end
+
+-- ── Guard: need known room for everything below ────────────────────────────────
+if map:getRoom() == nil then
+  cecho("<red>[Current room is unknown. Type #find or scan]\n")
+  return
+end
+
+-- ── WALK TO NAMED BOOKMARK ────────────────────────────────────────────────────
+for k, v in pairs(charData:get("fwalk", true)) do
+  if k == var1 then
+    cecho("<green>[Issue speedwalk to " .. var1 .. " at " .. v .. "]\n")
+    fastwalk(v)
+    return
+  end
+end
+
+-- ── ADD ───────────────────────────────────────────────────────────────────────
+if var1 == "add" and var2 ~= "" then
+  local targetroom = tonumber(var3) ~= nil and tonumber(var3) or map:getRoom()
+  cecho("<green>[Adding fwalk (" .. var2 .. ") -> room " .. targetroom .. "]\n")
+  tmpvar[var2] = targetroom
+  charData:set("fwalk", tmpvar, true)
+  return
+end
+
+-- ── DEL ───────────────────────────────────────────────────────────────────────
+if var1 == "del" and tmpvar[var2] ~= nil then
+  cecho("<green>[Deleting fwalk (" .. var2 .. ") at room " .. tmpvar[var2] .. "]\n")
+  tmpvar[var2] = nil
+  charData:set("fwalk", tmpvar, true)
+  return
+end
+
+-- ── DEFAULT: list reachable fwalks from current room ─────────────────────────
+for k, v in pairs(tmpvar) do
+  if roomExists(v) then
+    local zoneid = tonumber(getRoomUserData(v, "zoneid"))
+    local pathlength = 0
+    if not roomLocked(v) and getPath(map:getRoom(), v) then
+      pathlength = #speedWalkPath
+    end
+    if pathlength ~= 0 or map:getRoom() == v then
+      tmplist[#tmplist+1] = string.format("[%-30s] [%6d %-15s] [%3d] %s\n",
+        NyyLIB.areaTable[zoneid], v, k, pathlength, getRoomName(v))
+    end
+  end
+end
+
+cecho("<white>             Area                  Room#      fwalk     Distance          Room Name\n")
+printSorted(tmplist)
