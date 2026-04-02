@@ -10,6 +10,13 @@ in the TorilLib style. Every pattern here is copy-paste ready.
 
 ---
 
+# TorilLib Alias & Trigger Template Guide
+
+A self-contained reference for building your own Mudlet aliases and triggers
+in the TorilLib style. Every pattern here is copy-paste ready.
+
+---
+
 ## Table of Contents
 
 1. [Alias Regex Cheatsheet](#1-alias-regex-cheatsheet)
@@ -113,10 +120,50 @@ if action == "help" or action == "" then
 end
 
 -- ── ADD ───────────────────────────────────────────────────────────────────
-if action == "add" and arg1 ~= "" then
-  store[arg1] = arg2
-  charData:set("myalias", store, true)
-  cecho("<green>[Added " .. arg1 .. " = " .. arg2 .. "]\n")
+if action == "add" then
+  if name == "" then
+    cecho("<red>[#cvar add requires a name]\n")
+    return
+  end
+
+  local slots  = { val1, val2, val3, val4 }
+  local entry  = store[name] or {}          -- grab existing or start fresh
+  local merged = 0
+
+  for _, v in ipairs(slots) do
+    if v ~= "" then
+      -- find next empty index (up to 4)
+      local placed = false
+      for i = 1, 4 do
+        if not entry[i] then
+          entry[i] = v
+          merged   = merged + 1
+          placed   = true
+          break
+        end
+      end
+      if not placed then
+        cecho("<yellow>[cvar '" .. name .. "' is full (4 slots max), skipped: " .. v .. "]\n")
+      end
+    end
+  end
+
+  if merged == 0 then
+    cecho("<red>[#cvar add requires at least one value, or '" .. name .. "' is already full]\n")
+    return
+  end
+
+  store[name] = entry
+  charData:set("cvar", store, true)
+
+  -- Echo back the full merged state
+  local parts = {}
+  for i = 1, 4 do
+    if entry[i] then
+      parts[#parts+1] = "[" .. i .. "] " .. entry[i]
+    end
+  end
+  cecho("<green>[cvar '" .. name .. "': " .. table.concat(parts, "  ") .. "]\n")
   return
 end
 
