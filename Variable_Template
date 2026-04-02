@@ -1,0 +1,451 @@
+###-- My Request
+
+## I would like an example trigger that has local variables in the top of each function, i want to be able to use this trigger as template to make more of my own without asking you. lets use # for aliases always like #lbag bagname search1 search2 etc... but say i wanna make an alias that says #cvar add/delete  newvariablename optional variablevalue1 variablevalue1 up to lets say 4 variables for now, 
+## creates its own auto index, 1 2 3 4 etc. make it fully explained in a md file with all that code in there, ya feel me?
+
+# TorilLib Alias & Trigger Template Guide
+
+A self-contained reference for building your own Mudlet aliases and triggers
+in the TorilLib style. Every pattern here is copy-paste ready.
+
+---
+
+## Table of Contents
+
+1. [Alias Regex Cheatsheet](#1-alias-regex-cheatsheet)
+2. [The Variable Block Pattern](#2-the-variable-block-pattern)
+3. [Minimal Alias Template](#3-minimal-alias-template)
+4. [The #cvar Alias — Full Example](#4-the-cvar-alias--full-example)
+5. [Trigger Template](#5-trigger-template)
+6. [Quick Reference](#6-quick-reference)
+
+---
+
+## 1. Alias Regex Cheatsheet
+
+All aliases in TorilLib use `#` as the prefix.  
+Mudlet alias regex uses **capture groups** `()` — each group becomes `matches[2]`, `matches[3]`, etc.  
+`matches[1]` is always the full matched string; your captures start at `[2]`.
+
+| Pattern | What it captures | Example input |
+|---------|-----------------|---------------|
+| `(\S+)` | One word, no spaces | `#cmd word` |
+| `(\S*)` | One word, optional (can be empty) | `#cmd` or `#cmd word` |
+| `\s*(.*)$` | Everything after a space, optional | `#cmd rest of line` |
+| `(\S+)\s*(.*)$` | First word + rest of line | `#cmd arg1 rest` |
+| `(\S*)\s*(\S*)\s*(\S*)\s*(\S*)` | Up to 4 separate words | `#cmd a b c d` |
+
+### Standard 5-arg alias regex (what #cvar uses)
+
+```
+^#cvar\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)$
+```
+
+Captures: `matches[2]` through `matches[6]`  
+= `action`, `name`, `val1`, `val2`, `val3`, `val4`
+
+> **Tip:** Use `\s*(\S*)` (not `\s+(\S+)`) so all args are optional.
+> An unmatched optional group gives you an **empty string** `""`, not nil,
+> because `string.trim` is applied. Always compare with `~= ""`.
+
+---
+
+## 2. The Variable Block Pattern
+
+Every alias starts with a clean variable block at the top. This makes it
+easy to see what data the alias works with at a glance and change arg
+positions without hunting through logic.
+
+```lua
+-- ── ARG BLOCK ─────────────────────────────────────────────────────────────
+--  matches[2] = arg1 ... matches[N] = argN
+--  string.trim() collapses whitespace; unmatched groups return ""
+
+local action = string.trim(matches[2] or "")   -- add / del / list / etc.
+local name   = string.trim(matches[3] or "")   -- variable name
+local val1   = string.trim(matches[4] or "")   -- value slot 1
+local val2   = string.trim(matches[5] or "")   -- value slot 2
+local val3   = string.trim(matches[6] or "")   -- value slot 3
+local val4   = string.trim(matches[7] or "")   -- value slot 4
+
+-- ── STATE BLOCK ───────────────────────────────────────────────────────────
+--  Pull persistent data from charData once at the top.
+--  Always pass `true` as second arg to get a table (not nil) if missing.
+
+local store = charData:get("cvar", true)       -- returns {} if not yet set
+```
+
+Rules:
+- Always `or ""` on matches so you never get a nil error
+- Always `string.trim()` every arg
+- Pull `charData` once at the top, mutate `store`, save at the bottom
+- Never read `charData` twice in the same alias — use `store` throughout
+
+---
+
+## 3. Minimal Alias Template
+
+Use this as a skeleton when building a brand-new alias from scratch.
+
+```lua
+-- ─────────────────────────────────────────────────────────────────────────
+-- ALIAS: #myalias
+-- REGEX: ^#myalias\s*(\S*)\s*(\S*)\s*(\S*)$
+-- ARGS:  action  arg1  arg2
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- ── ARG BLOCK ─────────────────────────────────────────────────────────────
+local action = string.trim(matches[2] or "")
+local arg1   = string.trim(matches[3] or "")
+local arg2   = string.trim(matches[4] or "")
+
+-- ── STATE BLOCK ───────────────────────────────────────────────────────────
+local store = charData:get("myalias", true)
+
+-- ── HELP ──────────────────────────────────────────────────────────────────
+if action == "help" or action == "" then
+  cecho("<red>Usage:\n")
+  cecho("<red>  #myalias help         - this message\n")
+  cecho("<red>  #myalias add  a b     - example add\n")
+  cecho("<red>  #myalias del  a       - example delete\n")
+  cecho("<red>  #myalias list         - show all entries\n")
+  return
+end
+
+-- ── ADD ───────────────────────────────────────────────────────────────────
+if action == "add" and arg1 ~= "" then
+  store[arg1] = arg2
+  charData:set("myalias", store, true)
+  cecho("<green>[Added " .. arg1 .. " = " .. arg2 .. "]\n")
+  return
+end
+
+-- ── DEL ───────────────────────────────────────────────────────────────────
+if action == "del" and arg1 ~= "" then
+  if store[arg1] then
+    store[arg1] = nil
+    charData:set("myalias", store, true)
+    cecho("<green>[Deleted " .. arg1 .. "]\n")
+  else
+    cecho("<red>[No entry named '" .. arg1 .. "']\n")
+  end
+  return
+end
+
+-- ── LIST ──────────────────────────────────────────────────────────────────
+if action == "list" then
+  local count = 0
+  for k, v in pairs(store) do
+    cecho("<white>  " .. k .. " = " .. tostring(v) .. "\n")
+    count = count + 1
+  end
+  if count == 0 then
+    cecho("<yellow>[No entries stored]\n")
+  end
+  return
+end
+
+-- ── FALLTHROUGH ───────────────────────────────────────────────────────────
+cecho("<red>[Unknown command '" .. action .. "'. Type #myalias help]\n")
+```
+
+---
+
+## 4. The #cvar Alias — Full Example
+
+`#cvar` stores named custom variables per character, each with up to 4 value
+slots. Slots auto-index as `1`, `2`, `3`, `4`. You can store fewer — empty
+slots are simply not saved.
+
+### Commands
+
+```
+#cvar help
+#cvar add  name val1 [val2] [val3] [val4]
+#cvar del  name
+#cvar get  name
+#cvar list
+```
+
+### Examples
+
+```
+#cvar add  resistfire 80
+#cvar add  portal haven 3001 mage
+#cvar add  buff haste stoneskin freeaction bless
+#cvar get  portal
+#cvar del  portal
+#cvar list
+```
+
+### Storage Format
+
+Each entry is stored under its name as a table:
+
+```lua
+store["portal"] = {
+  [1] = "haven",
+  [2] = "3001",
+  [3] = "mage",
+  [4] = ""         -- empty slots not saved, shown as blank on get
+}
+```
+
+### Alias Code
+
+**Regex:**
+```
+^#cvar\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)$
+```
+
+**Lua:**
+```lua
+-- ─────────────────────────────────────────────────────────────────────────
+-- ALIAS: #cvar
+-- REGEX: ^#cvar\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)$
+-- ARGS:  action  name  val1  val2  val3  val4
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- ── ARG BLOCK ─────────────────────────────────────────────────────────────
+local action = string.trim(matches[2] or "")   -- add / del / get / list
+local name   = string.trim(matches[3] or "")   -- variable name (key)
+local val1   = string.trim(matches[4] or "")   -- value slot 1
+local val2   = string.trim(matches[5] or "")   -- value slot 2
+local val3   = string.trim(matches[6] or "")   -- value slot 3
+local val4   = string.trim(matches[7] or "")   -- value slot 4
+
+-- ── STATE BLOCK ───────────────────────────────────────────────────────────
+local store = charData:get("cvar", true)       -- {} if not yet saved
+
+-- ── HELP ──────────────────────────────────────────────────────────────────
+if action == "help" or action == "" then
+  cecho("<red>Usage:\n")
+  cecho("<red>  #cvar help                          - this message\n")
+  cecho("<red>  #cvar add  name val1 [v2] [v3] [v4] - store up to 4 values\n")
+  cecho("<red>  #cvar del  name                     - delete a variable\n")
+  cecho("<red>  #cvar get  name                     - show one variable\n")
+  cecho("<red>  #cvar list                          - show all variables\n")
+  return
+end
+
+-- ── ADD ───────────────────────────────────────────────────────────────────
+if action == "add" then
+  if name == "" then
+    cecho("<red>[#cvar add requires a name]\n")
+    return
+  end
+
+  -- Build value table; only store slots that have content
+  local entry = {}
+  local slots = { val1, val2, val3, val4 }
+  local count = 0
+
+  for i, v in ipairs(slots) do
+    if v ~= "" then
+      entry[i] = v
+      count    = i        -- track highest filled slot
+    end
+  end
+
+  if count == 0 then
+    cecho("<red>[#cvar add requires at least one value]\n")
+    return
+  end
+
+  store[name] = entry
+  charData:set("cvar", store, true)
+
+  -- Echo back what was saved
+  local parts = {}
+  for i = 1, count do
+    parts[#parts+1] = "[" .. i .. "] " .. (entry[i] or "")
+  end
+  cecho("<green>[cvar '" .. name .. "' saved: " .. table.concat(parts, "  ") .. "]\n")
+  return
+end
+
+-- ── DEL ───────────────────────────────────────────────────────────────────
+if action == "del" then
+  if name == "" then
+    cecho("<red>[#cvar del requires a name]\n")
+    return
+  end
+
+  if store[name] then
+    store[name] = nil
+    charData:set("cvar", store, true)
+    cecho("<green>[cvar '" .. name .. "' deleted]\n")
+  else
+    cecho("<red>[No cvar named '" .. name .. "']\n")
+  end
+  return
+end
+
+-- ── GET ───────────────────────────────────────────────────────────────────
+if action == "get" then
+  if name == "" then
+    cecho("<red>[#cvar get requires a name]\n")
+    return
+  end
+
+  local entry = store[name]
+  if not entry then
+    cecho("<red>[No cvar named '" .. name .. "']\n")
+    return
+  end
+
+  cecho("<white>cvar '" .. name .. "':\n")
+  for i = 1, 4 do
+    if entry[i] then
+      cecho("<cyan>  [" .. i .. "] " .. entry[i] .. "\n")
+    end
+  end
+  return
+end
+
+-- ── LIST ──────────────────────────────────────────────────────────────────
+if action == "list" then
+  local count = 0
+
+  -- Collect and sort keys for consistent display order
+  local keys = {}
+  for k in pairs(store) do
+    keys[#keys+1] = k
+  end
+  table.sort(keys)
+
+  for _, k in ipairs(keys) do
+    local entry = store[k]
+    local parts = {}
+    for i = 1, 4 do
+      if entry[i] then
+        parts[#parts+1] = "[" .. i .. "] " .. entry[i]
+      end
+    end
+    cecho("<white>" .. string.format("%-20s", k) .. "  " .. table.concat(parts, "  ") .. "\n")
+    count = count + 1
+  end
+
+  if count == 0 then
+    cecho("<yellow>[No cvars stored]\n")
+  else
+    cecho("<white>[" .. count .. " cvar(s) total]\n")
+  end
+  return
+end
+
+-- ── FALLTHROUGH ───────────────────────────────────────────────────────────
+cecho("<red>[Unknown #cvar command '" .. action .. "'. Type #cvar help]\n")
+```
+
+---
+
+## 5. Trigger Template
+
+Same variable-block discipline applied to triggers. The key difference:
+triggers fire from game output lines, so `matches[1]` is the full line and
+capture groups start at `matches[2]` just like aliases.
+
+```lua
+-- ─────────────────────────────────────────────────────────────────────────
+-- TRIGGER: my trigger name
+-- TYPE:    Perl Regex   ← ALWAYS set this in the Mudlet dropdown
+-- REGEX:   ^(Some pattern) (\w+) says '(.+)'$
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- ── CAPTURE BLOCK ─────────────────────────────────────────────────────────
+--  Name your captures here so the rest of the code is self-documenting.
+--  matches[1] = full line (never use this for logic)
+--  matches[2] = first capture group, etc.
+
+local fullline  = matches[1]          -- full raw line (rarely needed)
+local prefix    = matches[2]          -- e.g. room prefix, sender, etc.
+local speaker   = matches[3]          -- whoever spoke
+local message   = matches[4]          -- what they said
+
+-- ── GUARD BLOCK ───────────────────────────────────────────────────────────
+--  Bail out early if the trigger fired but conditions aren't right.
+--  Keeps the happy path flat and readable.
+
+if speaker == nil or speaker == "" then
+  return
+end
+
+-- ── LOGIC BLOCK ───────────────────────────────────────────────────────────
+local lowerMsg = message:lower()
+
+if string.find(lowerMsg, "keyword", 1, true) then
+  cecho("<green>[" .. speaker .. " mentioned keyword]\n")
+  -- do something...
+  return
+end
+
+-- ── DEFAULT ───────────────────────────────────────────────────────────────
+-- Handle anything that got through the guards but didn't match a branch
+cecho("<yellow>[Trigger fired but no branch matched for: " .. speaker .. "]\n")
+```
+
+### Trigger Checklist
+
+Every trigger you make, verify these before testing:
+
+- [ ] Type is set to **Perl Regex** in the Mudlet dropdown (not substring, not begins-with)
+- [ ] If it's in a group, the **group is enabled** AND the **trigger itself is enabled**  
+      (Mudlet does NOT auto-enable children when you enable a group)
+- [ ] Each child trigger you want enabled is enabled **by name** in Lua:  
+      `enableTrigger("my trigger name")`
+- [ ] If it needs to fire only sometimes, it starts **disabled** and you  
+      `enableTrigger()` / `disableTrigger()` it explicitly around the send()
+
+---
+
+## 6. Quick Reference
+
+### charData cheatsheet
+
+```lua
+-- Read (always pass true to get {} instead of nil)
+local store = charData:get("keyname", true)
+
+-- Write (always pass true to persist across sessions)
+charData:set("keyname", store, true)
+
+-- Delete a key inside a stored table
+store["mykey"] = nil
+charData:set("keyname", store, true)
+
+-- Wipe the whole store
+charData:set("keyname", {}, true)
+```
+
+### Color codes quick list
+
+```
+<red>       errors, warnings
+<green>     success, confirmations
+<yellow>    notices, unknowns
+<white>     headers, labels
+<cyan>      data values
+```
+
+### table.sort for consistent list output
+
+```lua
+local keys = {}
+for k in pairs(store) do keys[#keys+1] = k end
+table.sort(keys)
+for _, k in ipairs(keys) do
+  -- display store[k]
+end
+```
+
+### string.format column alignment
+
+```lua
+-- Left-align name in 20 chars, right-align number in 5 chars
+string.format("%-20s %5d", name, number)
+```
+
+---
+
+*TorilLib alias template — keep this file next to your profile for reference.*
