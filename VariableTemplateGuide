@@ -1,0 +1,117 @@
+Slot map — one cvar per group member name:
+slot 1 = role     (tank / healer / dps / support)
+slot 2 = class    (warrior / cleric / mage etc)
+slot 3 = race     (human / elf / dwarf etc)
+slot 4 = level
+slot 5 = hp
+slot 6 = mana
+slot 7 = moves
+slot 8 = (spare)
+
+Populate manually:
+
+#cvar add Nyarla tank warrior human 50 500 300 200
+#cvar add Serath healer cleric elf 48 400 800 150
+#cvar add Drogg dps mage gnome 45 300 600 180
+
+Set your own role so the trigger can check it:
+#cvar add myinfo tank warrior human 52 800 400 250
+
+```
+lua
+-- =============================================================================
+-- SCRIPT: group_triggers
+-- Requires cvar_script.lua loaded first (uses cvar_value)
+-- =============================================================================
+
+-- Who am I — reads myinfo slot 1
+function my_role()
+  return cvar_value("myinfo", 1) or ""
+end
+
+function group_rescue_check(attackedname, npcname, hits)
+  local role = cvar_value(attackedname, 1)
+
+  -- unknown group member, ignore
+  if not role then return end
+
+  -- if the person being attacked is NOT a tank and I AM the tank, rescue
+  if role ~= "tank" and my_role() == "tank" then
+    cecho("<yellow>[Rescue trigger: " .. attackedname .. " (" .. role .. ") attacked by " .. npcname .. " — sending rescue]\n")
+    send("rescue " .. attackedname)
+  end
+end
+
+function group_show_member(name)
+  local entry = cvar_value(name)
+  if not entry then
+    cecho("<red>[No group data for '" .. name .. "']\n")
+    return
+  end
+
+  local labels = { "role", "class", "race", "level", "hp", "mana", "moves" }
+  cecho("<white>-- " .. name .. " --\n")
+  for i, label in ipairs(labels) do
+    if entry[i] then
+      cecho("<cyan>  " .. string.format("%-8s", label) .. tostring(entry[i]) .. "\n")
+    end
+  end
+end
+
+function group_show_all()
+  local store = charData:get("cvar", true)
+  local keys  = {}
+  for k in pairs(store) do keys[#keys+1] = k end
+  table.sort(keys)
+
+  cecho("<white>" .. string.format("%-12s %-10s %-10s %-8s %-6s %-6s %-6s %-6s\n",
+    "Name","Role","Class","Race","Lvl","HP","Mana","Moves"))
+  cecho("<white>" .. string.rep("-", 70) .. "\n")
+
+  for _, k in ipairs(keys) do
+    local e = store[k]
+    if e and e[1] then   -- only show entries that look like group members
+      cecho("<white>" .. string.format("%-12s %-10s %-10s %-8s %-6s %-6s %-6s %-6s\n",
+        k,
+        tostring(e[1] or ""),
+        tostring(e[2] or ""),
+        tostring(e[3] or ""),
+        tostring(e[4] or ""),
+        tostring(e[5] or ""),
+        tostring(e[6] or ""),
+        tostring(e[7] or "")))
+    end
+  end
+end
+```
+
+```
+--trigger 1
+-- TRIGGER NAME: group_rescue
+-- TYPE: Perl Regex
+-- REGEX: ^(\w+) is attacked by (.+), landing (\d+) hits?
+
+local attackedname = matches[2]
+local npcname      = matches[3]
+local hits         = tonumber(matches[4])
+
+group_rescue_check(attackedname, npcname, hits)
+
+```
+end trigger 1
+```
+
+```
+bonus alias
+```
+-- ALIAS: #gshow
+-- REGEX: ^#gshow\s*(\S*)$
+-- shows one member or all if no arg
+
+local name = string.trim(matches[2] or "")
+if name == "" then
+  group_show_all()
+else
+  group_show_member(name)
+end
+```
