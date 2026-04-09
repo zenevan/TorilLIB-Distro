@@ -9,6 +9,35 @@ A modular Mudlet library and AI-assisted pipeline for **TorilMUD**.
 This project combines automated triggers, database-driven content, and AI-generated assets into a cohesive toolkit.
 
 ---
+Hello, finally able to get privacy and enough security to begin development again, blasting this pc and full reinstall, i have
+down to a science. also the new am5 pc will be built by may.
+
+There is a new release of good ai that is local, and am doing full burndown and rebuild.
+
+I still have all the prompts to build the themes with easy add new for your own styles.
+Map prompt when last run was at room 12,000 and something, and i am still gathering data
+on npc every single zone i attend.
+
+i also have a mudlet integrated scrape of valkeryian blades site and have an in game
+editor to build it from scratch. If you feel froggy, install xampp, mysql and a database schema
+with python scripts to export and import data, scrape other sites, these scripts automatically
+credit author and include easy share using gmail if you want.
+
+Every feature i am creating is modular, meaning, u can turn it off and on with ease, i am 
+making all trigger text, regex for torilmud use internal functions instead of a bunch of triggers
+we're gonna just do prompt to prompt, role based conditions, a powers import, skills import
+that does every character on its own, or it gleans data as you get it, you decide.
+
+I hope this can serve as a nice baseline for young, learning and advanced coders
+to not only make it semi educational, because it generated hover for all the web pages anyway
+and storage for this is cheap =S
+
+i will try to put the current TorilLib port of Nysslib out as i debug it over the next week.
+Here is my first attempt: space for after i blast this stupid computer away.
+
+Enjoy! - Afu Eats Babies
+hungry fucking troll from ghore
+
 
 ## ✨ Features
 
