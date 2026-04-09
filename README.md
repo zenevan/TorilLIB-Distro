@@ -93,7 +93,7 @@ hungry fucking troll from ghore
 ### Tiamat Tablet
 ![Tablet](./Tablet.png)
 
-To Contribute, send me a message at zenevan@zenevan.com or here
+To Contribute, send me a message at zenevan420@gmail.com or here
 Images
 13 minutes ago
 tablet.png
